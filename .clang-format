@@ -1,0 +1,11 @@
+# CLANG FORMAT CONFIG v0.2.7
+---
+BasedOnStyle: Mozilla
+---
+Language: Cpp
+IndentWidth: 4
+ColumnLimit: 80
+DerivePointerAlignment: false
+PointerAlignment: Left
+---
+
