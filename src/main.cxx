@@ -1,7 +1,17 @@
-#include <main.hxx>
+#include <string>
+#include <ui.hxx>
+#include <iostream>
+#include <snappy.h>
+#include <fstream>
 
-int main(int argc, char *argv[]) {
-    cout << "Hello, Fergie!" << endl;
+using namespace std;
+
+int
+main(int argc, char* argv[])
+{
+    ui("./test.todo");
+
+
 
     return 0;
 }
