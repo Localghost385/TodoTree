@@ -1,4 +1,7 @@
+#ifndef TREE_INCLUDED
+#define TREE_INCLUDED
 #include <tree.hxx>
+#endif
 
 string
 treeToText(TreeNode* tree);

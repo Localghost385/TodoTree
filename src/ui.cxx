@@ -1,37 +1,10 @@
 #include <converter.hxx>
-#include <cstddef>
 #include <curses.h>
-#include <deps.hxx>
-#include <iterator>
-#include <vector>
+#include <fstream>
+#include <treeHandler.hxx>
 
 vector<TreeNode*> trees = {};
 vector<string> treeNames = {};
-
-TreeNode*
-generateTree(int levels, int totalNodes)
-{
-    TreeNode* root = new TreeNode("1");
-    vector<TreeNode*> queue = { root };
-    int count = 1;
-
-    while (count < totalNodes) {
-        TreeNode* currentNode = queue[0];
-        queue.erase(queue.begin());
-
-        for (int i = 0; i < levels; i++) {
-            count++;
-            TreeNode* newNode = new TreeNode(to_string(count));
-            currentNode->addChild(newNode);
-            queue.push_back(newNode);
-            if (count == totalNodes) {
-                break;
-            }
-        }
-    }
-
-    return root;
-}
 
 class windowSmartPtr
 {
@@ -61,122 +34,13 @@ class windowSmartPtr
 
     // Function to draw a box around the window
     void box() { ::box(window, 0, 0); }
+
+    void scollWindow(int lines)
+    {
+        wscrl(window, lines);
+        refresh();
+    }
 };
-
-// RECURSIVELy print nodetree and its children
-
-/**
- * Prints the tree structure represented by the given TreeNode object to the
- * specified window. This function recursively traverses the tree and prints
- * each node along with appropriate indentation symbols. The tree is printed
- * in a hierarchical manner, with each level indented by three spaces. Each
- * node is printed on a new line.
- *
- * @param node The TreeNode object representing the root of the tree to be
- *             printed.
- * @param window The window to which the tree structure should be printed.
- * @param starty The y-coordinate of the starting position for printing the
- *               tree structure.
- * @param startx The x-coordinate of the starting position for printing the
- *               tree structure.
- * @param depth The current depth of the tree traversal. This parameter is
- *              used for indentation purposes.
- * @param parentIsLast A boolean value indicating whether the current node is
- *                     the last child of its parent. This parameter is used
- *                     for printing appropriate indentation symbols.
- *
- * @throws None
- */
-void
-printTreeNode(TreeNode* node,
-              WINDOW* window,
-              int depth = 0,
-              bool parentIsLast = true)
-{
-    if (node == nullptr) {
-        return;
-    }
-
-    int branchesToLeft = 0;
-    bool blankBranch = false;
-    // Indentation for current node
-    // Iterate through each level of the tree
-    for (int i = 0; i < depth; i++) {
-        // Check if it's the last level
-        if (i == depth - 1) {
-            // Print the appropriate symbol based on whether the parent is the
-            // last child
-            wprintw(window, parentIsLast ? "├─ " : "└─ ");
-        } else {
-            // Check if the ancestor at this depth is the last child
-            const TreeNode* ancestor = node;
-            for (int j = 1; j < depth - i; ++j) {
-                // Traverse up the tree to the ancestor at this depth
-                ancestor = ancestor->parent;
-            }
-            // Print the appropriate symbol based on whether the ancestor is the
-            // last child of its parent
-            if (ancestor->parent &&
-                ancestor == ancestor->parent->children.back()) {
-                wprintw(window, "   ");
-                branchesToLeft++;
-                blankBranch = true;
-
-            } else {
-                wprintw(window, "│  ");
-                branchesToLeft++;
-                blankBranch = false;
-            }
-        }
-    }
-
-    // check if node is completed
-    // Print current node data
-    if (node->data.length() < COLS - 44 - branchesToLeft * 3) {
-        if (node->completed) {
-            wattron(window, COLOR_PAIR(3));
-        }
-        wprintw(window, "%s\n", node->data.c_str());
-        wattron(window, COLOR_PAIR(1));
-    } else {
-        while (node->data.length() > COLS - 44 - branchesToLeft * 3) {
-            wprintw(
-              window,
-              "%s\n",
-              node->data.substr(0, COLS - 44 - branchesToLeft * 3).c_str());
-            node->data =
-              node->data.substr((window->_maxx - 2) - branchesToLeft * 3);
-            if (blankBranch) {
-                for (int i = 0; i < branchesToLeft + 1; i++) {
-                    wprintw(window, "   ");
-                }
-            } else {
-                for (int i = 0; i < branchesToLeft + 1; i++) {
-                    wprintw(window, "│  ");
-                }
-                if (node->completed) {
-                    wattron(window, COLOR_PAIR(3));
-                }
-                wprintw(window, "%s\n", node->data.substr(20).c_str());
-                wattron(window, COLOR_PAIR(1));
-            }
-        }
-    }
-    // Reset color
-    // wattron(window, COLOR_PAIR(0));
-    wattron(window, COLOR_PAIR(1));
-
-    // Recursively print children
-    size_t numChildren = node->children.size();
-    for (size_t i = 0; i < numChildren; i++) {
-        bool isLastChild = (i == numChildren - 1);
-        printTreeNode(node->children[i], window, depth + 1, !isLastChild);
-    }
-}
-
-vector<TreeNode*> orderTrees(TreeNode* trees){
-    //create a vector of treeNodes, based on their vertical position in the 2d representation.
-}
 
 void
 treeOptionsUpdate(windowSmartPtr* options, int index)
@@ -241,7 +105,7 @@ treeOptionsUpdate(windowSmartPtr* options, int index)
 }
 
 void
-ui_init(string source_file)
+ui(string source_file)
 {
     setlocale(LC_CTYPE, "");
     // init ncurses
@@ -266,14 +130,20 @@ ui_init(string source_file)
     init_pair(1, COLOR_WHITE, COLOR_BLACK);
     init_pair(2, COLOR_BLUE, COLOR_BLACK);
     init_pair(3, COLOR_GREEN, COLOR_BLACK);
+    init_pair(4, COLOR_RED, COLOR_BLACK);
 
     //////////////////////////////////////////////////////////////////////////////////////////
     getch();
     //////////////////////////////////////////////////////////////////////////////////////////
 
-    // init windows
+    // create windows
     windowSmartPtr tree(LINES, 20, 0, 1);
     windowSmartPtr contents(LINES, COLS - 22, 0, 21);
+    windowSmartPtr treeOptions(tree.window, LINES - 2, 17, 1, 2);
+    windowSmartPtr ContentsPrint(contents.window, LINES - 2, COLS - 26, 1, 23);
+    // scrollbars
+    windowSmartPtr treeScroll(tree.window, LINES - 2, 1, 1, 19);
+    windowSmartPtr contentsScroll(contents.window, LINES - 2, 1, 1, COLS - 3);
 
     tree.box();
     wbkgd(tree.window, COLOR_PAIR(2));
@@ -289,55 +159,95 @@ ui_init(string source_file)
               "Remove |");
     contents.refresh();
 
-    // read file
-
-    // create tree subwindows
-    windowSmartPtr treeOptions(tree.window, 5, 5, 1, 1);
-    windowSmartPtr ContentsPrint(contents.window, LINES - 2, COLS - 26, 1, 23);
-
     treeOptions.box();
     wbkgd(treeOptions.window, COLOR_PAIR(1));
     treeOptions.refresh();
-
     ContentsPrint.refresh();
-    scrollok(ContentsPrint.window, TRUE);
+
+    wbkgd(treeScroll.window, COLOR_PAIR(1));
+    wbkgd(contentsScroll.window, COLOR_PAIR(1));
+    treeScroll.refresh();
+    contentsScroll.refresh();
 
     // trees = fileToTreeNodes(source_file);
-    trees.push_back(generateTree(2, 100));
+    trees.push_back(generateTree(2, 20));
 
     // populate treeNames
     for (TreeNode* tree : trees) {
         treeNames.push_back(tree->data);
     }
 
-    printTreeNode(trees[0], ContentsPrint.window);
     ContentsPrint.refresh();
 
     // write tree to file
-    treeNodesToFile(trees, source_file);
-}
+    // treeNodesToFile(trees, source_file);
 
-void
-ui(string source_file)
-{
-    // start ui
-    ui_init(source_file);
+    windowSmartPtr quit(6, 20, LINES / 2 - 3, COLS / 2 - 10);
+    TreeNode* selectedTree = trees[0];
+    // selectedTree->children[0]->children[0]->toggleCompletion();
+    // printw("%s", selectedTree->children[0]->completed ? "true" : "false");
+    // selectedTree->children[0]->children[1]->collapsed = true;
 
-    // update tree options
+    vector<TreeNode*> orderedTrees = orderTrees(selectedTree);
+    vector<string> buffer;
 
+    ofstream file;
+    file.open("orderedTrees.txt", ios::out | ios::trunc);
+    for (TreeNode* tree : orderedTrees) {
+        file << tree->data << "\n";
+    }
+    file.close();
+
+    refresh();
+    getch();
+    int selector = 0;
+    int cursor = 0;
+
+    char input;
     // add loop
-    while (char input = getch() != 'q' && input != 'Q') {
-        int selector = 0;
+    while (true) {
+        input = getch();
+        if (input == 'q' || input == 'Q') {
+            quit.box();
+            wbkgd(quit.window, COLOR_PAIR(1));
+            mvwprintw(quit.window, 1, 3, "Are you sure?");
+            mvwprintw(quit.window, 3, 2, "Y - Yes | N - No");
+            quit.refresh();
+            char answer = getch();
+            if (answer == 'y' || answer == 'Y') {
+                endwin();
+                exit(0);
+            } else {
+                werase(quit.window);
+                // treeOptions.refresh();
+            }
+        }
 
         switch (input) {
-
             case 'w':
             case 'W':
-                selector--;
+                // move selector up
+                if (cursor > -10) {
+                    cursor--;
+                } else if (selector > 0) {
+                    selector--;
+                } else if (cursor > -((LINES - 2) / 2)) {
+                    cursor--;
+                }
                 break;
             case 's':
             case 'S':
-                selector++;
+                if (cursor < 10) {
+                    cursor++;
+
+                } else if (selector < buffer.size() - LINES + 2) {
+                    selector++;
+                } else if ((LINES - 2 > orderedTrees.size() &&
+                            cursor < ((LINES - 2) / 2) - 1) ||
+                           (LINES - 2 <= orderedTrees.size() &&
+                            cursor < 10)) {
+                    cursor++;
+                }
                 break;
             case '\t':
                 // switch
@@ -350,8 +260,9 @@ ui(string source_file)
             case 'C':
                 // collapse/expand
                 break;
-            case '\n':
+            case 'd':
                 // complete/incomplete
+                printw("%s", orderedTrees[selector]->data.c_str());
                 break;
             case 'a':
             case 'A':
@@ -362,7 +273,63 @@ ui(string source_file)
                 // remove
                 break;
         }
-    }
 
-    getch();
+        tree.box();
+        contents.box();
+        mvwprintw(
+          contents.window,
+          LINES - 1,
+          ((COLS - 22) / 2) - 64,
+          "| W - ↑ | S - ↓ | Tab - Switch | Q - Exit | E - Edit | C "
+          "- Collapse/Expand | Enter - Complete/Incomplete | A - Add | R - "
+          "Remove |");
+        wbkgd(tree.window, COLOR_PAIR(1));
+        wbkgd(contents.window, COLOR_PAIR(2));
+        tree.refresh();
+        contents.refresh();
+
+        // editor update
+        buffer = generateBuffer(selectedTree);
+        orderedTrees = orderTrees(selectedTree);
+
+        // print the right portion of the buffer based on selector
+        werase(ContentsPrint.window);
+        for (int i = 0;
+             i < (orderedTrees.size() < LINES - 2 ? orderedTrees.size()
+                                                  : LINES - 2);
+             i++) {
+
+            mvwprintw(
+              ContentsPrint.window, i, 0, "%s", buffer[i + selector].c_str());
+            if (orderedTrees[i] != nullptr && orderedTrees[i]->completed) {
+                wattron(ContentsPrint.window, COLOR_PAIR(3));
+                wprintw(ContentsPrint.window, " dd");
+                wattron(ContentsPrint.window, COLOR_PAIR(1));
+                wprintw(ContentsPrint.window, " dd");
+            } else {
+                wattron(ContentsPrint.window, COLOR_PAIR(4));
+                wprintw(ContentsPrint.window, " X");
+                wattron(ContentsPrint.window, COLOR_PAIR(1));
+                wprintw(ContentsPrint.window, " X");
+            }
+
+            if (i == ((LINES - 2) / 2) + cursor) {
+                wattron(ContentsPrint.window, COLOR_PAIR(2));
+                wprintw(ContentsPrint.window, "          <");
+                wattroff(ContentsPrint.window, COLOR_PAIR(2));
+            }
+        }
+
+        ContentsPrint.refresh();
+
+        werase(contentsScroll.window);
+        int scrollbarSize = buffer.size() / (LINES + 2);
+        for (int i = 0; i < scrollbarSize; i++) {
+            mvwprintw(contentsScroll.window,
+                      i + selector /
+                            (buffer.size() / ((LINES - scrollbarSize) + 1)),
+                      0,
+                      "█");
+        }
+    }
 }

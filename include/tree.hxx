@@ -21,6 +21,9 @@ struct TreeNode
     }
     void addParent(TreeNode* parent) { this->parent = parent; }
 
+    void toggleCompletion() { completed = !completed; }
+    void toggleCollapse() { collapsed = !collapsed; }
+
     // Destructor to deallocate memory used by children
     ~TreeNode()
     {
